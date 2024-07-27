@@ -1,0 +1,52 @@
+        """
+    Given the context below with today's date {date} (which is {day}), answer the user questions as accurately as possible and set the starting and ending date as per the question asked by user and if it does not specify the time peroid then at default take the time frame 'day' from today's date to the last 30 days,
+    take the time frame from the [1minute,30minute,day,week,month]
+    Context:
+    <context>
+    {context}
+    </context>
+    Give the instrument key of requested company or firm given by user in Question and put it into URL 
+
+    "https://api.upstox.com/v2/historical-candle/:instrument_key/:time_frame/:end_date/:start_date" 
+    if the user wants the historical data then use it,
+
+    for the different interval's url generation for axis bank then use this examples :
+    [ if user wants the data of yesterday or similarly some other specific day with in past 6 months from today then 
+    url = 'https://api.upstox.com/v2/historical-candle/NSE_EQ|INF846K011K1/1minute/2024-07-25'
+
+    if user wants the data of current month,previos month or similarly some other specific month then time frame is of day
+    url = 'https://api.upstox.com/v2/historical-candle/NSE_EQ|INF846K011K1/30minute/2024-03-13'
+
+    if user wants the data of current year,previos year or similarly some other specific year then time frame is month,day
+    url = 'https://api.upstox.com/v2/historical-candle/NSE_EQ|INF846K011K1/day/2024-07-25/2024-03-25'
+
+    but if user want the data of some period days or weeks or months then use 
+    https://api.upstox.com/v2/historical-candle/NSE_EQ|INF846K011K1/day/2024-07-25/2024-04-25
+    ]
+    that means what so ever user demand to know about the stock with their given time frame you have to opt a bit smaller time frame for the same 
+    for ex.:
+        if user wants to know the about the month data then u have to give time frame of 30minute 
+        and so on..
+
+    else only for the current day's data only for axis bank 
+    "https://api.upstox.com/v2/historical-candle/intraday/:instrument_key/:interval"
+
+    for the different interval's url generation for axis bank then use this examples :
+    [ if user wants the data of today then time_frame is 1minute,30minute
+    url = 'https://api.upstox.com/v2/historical-candle/intraday/NSE_EQ|INF846K011K1/30minute'
+    ]
+
+    suppose if user asked for axis,hdfc and sbi banks data of today and if today's date=2023-11-19 for this output is
+    ['https://api.upstox.com/v2/historical-candle/NSE_EQ|INE238A01034/30minute/2024-04-11',
+    'https://api.upstox.com/v2/historical-candle/NSE_EQ|INF179KC1DH4/30minute/2024-04-11',
+    'https://api.upstox.com/v2/historical-candle/NSE_EQ|INE123W01016/30minute/2024-04-11'
+    ]
+    but, if the user wanted to know the information of history stocks older than 6 months from current date then u did not have to use the time frame of 1minute and 30minute for it. 
+    interval can be 
+    Questions:
+    {input}
+    generate the URLs if more than one companies are present in user input and return a list of urls based on the format passed above in json format only for each company 
+    if user not specifing the any company name in prompt then return None in such cases.
+    for example :
+    prompt  contains "give the top 5 companies to invest in current time" then give response as None.
+    generate the json object of urls list at all the time without any character or text formatting.
