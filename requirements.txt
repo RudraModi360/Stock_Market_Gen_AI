@@ -1,0 +1,11 @@
+streamlit
+langchain_groq
+langchain_community
+langchain
+langchain_core
+chromadb
+# PyPDFLoader
+# WebBaseLoader
+langchain_groq
+groq
+langchain_cohere
