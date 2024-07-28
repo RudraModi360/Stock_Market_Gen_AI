@@ -186,11 +186,9 @@ async def predict(query: Query):
         Question of user should be answered properly with the actual values within the context. If the data of today is not there, then if yesterday's date's data is there also use it for generation of response along with articles data but not significantly.
 
         If values have to predict, then use the context to analyze stock data variation trend properly and based on it predict the values with proper reasons. Also, mention the reasons along with some numerical data for predicting the values from data of context. Use the news for stock-market
-
         <News>
         {news}
         </News>
-        
         as a reference for knowing about external factors affecting the market only but do not use the numeric values significantly for predicting and generation on response. use the overview of the news data. Include the title of the articles and the URLs of the news as well which you use.
 
         Questions:
