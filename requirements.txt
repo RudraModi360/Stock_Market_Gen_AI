@@ -10,3 +10,5 @@ langchain_groq
 groq
 langchain_cohere
 google
+fastapi
+uvicorn
