@@ -190,7 +190,6 @@ async def predict(query: Query):
         <News>
         {news}
         </News>
-        
         as a reference for knowing about external factors affecting the market only but do not use the numeric values significantly for predicting and generation on response. use the overview of the news data. Include the title of the articles and the URLs of the news as well which you use.
 
         Questions:
