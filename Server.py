@@ -10,14 +10,12 @@ from langchain_groq import ChatGroq
 from langchain.chains import create_retrieval_chain
 from datetime import datetime, date
 from langchain_cohere import CohereEmbeddings
-import json
+import json,time
 from web_scrap import search_urls
 from concurrent.futures import ThreadPoolExecutor
 
-groq_api_key = "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"
-llm = ChatGroq(
-    groq_api_key=groq_api_key, model_name="llama3-groq-70b-8192-tool-use-preview"
-)
+groq_api_key = "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"
+llm = ChatGroq(groq_api_key=groq_api_key, model_name="llama3-70b-8192",temperature=0.3)
 embeddings_obj = CohereEmbeddings(
     model="embed-english-v3.0",
     cohere_api_key="fb1d788zuAEdb83rWpe5MESR6Gx16sI7wu0rHQVP",
@@ -53,44 +51,49 @@ async def predict(query: Query):
     docs = loaded_db.similarity_search("instrument key of RBI")
     json_prompt = ChatPromptTemplate.from_template(
         """
-        Given today's date {date} (which is {day}), answer user questions accurately by focusing on the symbol of comapany so much and set the start and end dates as per the question. If no period is specified, use 'day' from today to the past 30 days. Choose the time frame from [1minute, 30minute, day, week, month].
-        Context:
-        <context>
-        {context}
-        </context>
+    Given today's date {date} (which is {day}), answer user questions accurately and set the start and end dates as per the question. If no period is specified, use 'day' from today to the past 30 days. Choose the time frame from [1minute, 30minute, day, week, month].
 
-        Generate URLs based on user questions as follows:
+    Context:
+    <context>
+    {context}
+    </context>
 
-        1. For specific days within the past 6 months:
-            - url = 'https://api.upstox.com/v2/historical-candle/:instrument_key/1minute/:end_date'
-        2. For specific months:
-            - url = 'https://api.upstox.com/v2/historical-candle/:instrument_key/30minute/:end_date'
-        3. For specific years:
-            - url = 'https://api.upstox.com/v2/historical-candle/:instrument_key/day/:end_date/:start_date'
-        4. For periods of days, weeks, or months:
-            - url = 'https://api.upstox.com/v2/historical-candle/:instrument_key/day/:end_date/:start_date'
+    Generate URLs based on user questions as follows:
 
-        For today's data for Axis Bank:
-        - url = 'https://api.upstox.com/v2/historical-candle/intraday/:instrument_key/30minute'
+    1. For specific days within the past 6 months:
+        - url = 'https://api.upstox.com/v2/historical-candle/:instrument_key/1minute/:end_date'
+    2. For specific months:
+        - url = 'https://api.upstox.com/v2/historical-candle/:instrument_key/30minute/:end_date'
+    3. For specific years:
+        - url = 'https://api.upstox.com/v2/historical-candle/:instrument_key/day/:end_date/:start_date'
+    4. For periods of days, weeks, or months:
+        - url = 'https://api.upstox.com/v2/historical-candle/:instrument_key/day/:end_date/:start_date'
 
-        Example: 
-        If the user asks for data of Axis, HDFC, and SBI banks for today, generate:
-        [
-            'https://api.upstox.com/v2/historical-candle/NSE_EQ|INE238A01034/30minute/{date}',
-            'https://api.upstox.com/v2/historical-candle/NSE_EQ|INF179KC1DH4/30minute/{date}',
-            'https://api.upstox.com/v2/historical-candle/NSE_EQ|INE123W01016/30minute/{date}'
-        ]
+    For today's data for Axis Bank:
+    - url = 'https://api.upstox.com/v2/historical-candle/intraday/:instrument_key/30minute'
 
-        Do not use 1minute or 30minute for data older than 6 months.
+    Example: 
+    If the user asks for data of Axis, HDFC, and SBI banks for today, generate:
+    [
+        'https://api.upstox.com/v2/historical-candle/NSE_EQ|INE238A01034/30minute/{date}',
+        'https://api.upstox.com/v2/historical-candle/NSE_EQ|INF179KC1DH4/30minute/{date}',
+        'https://api.upstox.com/v2/historical-candle/NSE_EQ|INE123W01016/30minute/{date}'
+    ]
 
-        Questions:
-        {input}
+    Do not use 1minute or 30minute for data older than 6 months.
 
-        Generate URLs in JSON format for each company mentioned in the input. If no company is specified, return None.
+    Questions:
+    {input}
 
-        Example: 
-        If the prompt is "give the top 5 companies to invest in currently," return None.
-        Output JSON without extra characters or formatting.
+    Generate URLs in JSON format for each company mentioned in the input. If no company is specified, return None.
+
+    Example: 
+    If the prompt is "give the top 5 companies to invest in currently," return None.
+
+    Notice:
+    Output JSON only any like [eg. Since the question is asking for the current stock price of Axis Bank, I will generate a URL for today's data. Here is the output:
+    ]
+    without extra characters,text or formatting.
     """
     )
     document_chain = create_stuff_documents_chain(llm, json_prompt)
@@ -104,7 +107,6 @@ async def predict(query: Query):
             "day": datetime.today().strftime("%A"),
         }
     )
-    
     try:
         data = response["answer"]
         if isinstance(data, str):
@@ -134,7 +136,9 @@ async def predict(query: Query):
             try:
                 loader = WebBaseLoader(links)
                 web_data = loader.load()
-                text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+                text_splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=500, chunk_overlap=50
+                )
                 web_splitted = text_splitter.split_documents(web_data)
                 return web_splitted
             except Exception as e:
@@ -149,7 +153,9 @@ async def predict(query: Query):
             ]
             loader = WebBaseLoader(news_links)
             news_web_data = loader.load()
-            text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=500, chunk_overlap=50
+            )
             news_splitted = text_splitter.split_documents(news_web_data)
         except Exception as e:
             news_splitted = None
@@ -157,24 +163,38 @@ async def predict(query: Query):
         web_splitted = web_splitted_future.result()
         db = FAISS.from_documents(web_splitted, embeddings_obj)
         print(db.similarity_search(query.description))
-        print("--" * 25)
+        print("--" * 60)
     except Exception as e:
+        check=ChatPromptTemplate.from_template(
+            'if the user prompts is "{user_ip}" general talks [eg. hi,hello how are you ?] then return null in response'
+        )
+        check_temp=check.format(user_ip=query.description)
+        time.sleep(2)
+        check_res=llm.invoke(check_temp)
+        print("**"*50)
+        print(check_res)
+        print("**"*50)
         web_splitted = None
 
-    print(db)
     edited_prompt = ChatPromptTemplate.from_template(
-    """
-    By Using the Context as reference given below give the appropriate answer of the user question:
-    <context>
-    {context}
-    </context>
-    question of user should be answer properly with the actual values from the context if the yesterday date's data is there also use it for generation of response if exists along with articles data.
-    If values have to predict then use the context to analyse stock data variation trend properly along with data of context and based on it predict the values with proper reasons also mention the reasons along with some numbering data for predicting the values, use the news for stock-market {news} as a reference for knowing about external factor affecting the market only. Include the title of the articles and the urls of the news as well which you use.
-    else 
-    Questions:
-    {input}
+        """
+        By Using the Context as reference given below give the appropriate answer of the user question:
 
-    give the answer without commenting anything about the context and who is providing the data with response size almost around 1500-10,000 tokens & behave like you are stocks advisor and if prompt is general talks like [eg. "hi","what can you do for me" ..] and respond according to your role.
+        <context>
+        {context}
+        </context>
+        Question of user should be answered properly with the actual values within the context. If the data of today is not there, then if yesterday's date's data is there also use it for generation of response along with articles data but not significantly.
+
+        If values have to predict, then use the context to analyze stock data variation trend properly and based on it predict the values with proper reasons. Also, mention the reasons along with some numerical data for predicting the values from data of context. Use the news for stock-market
+        <News>
+        {news}
+        </News>
+        as a reference for knowing about external factors affecting the market only but do not use the numeric values significantly for predicting and generation on response. use the overview of the news data. Include the title of the articles and the URLs of the news as well which you use.
+
+        Questions:
+        {input}
+
+        Give the answer without commenting anything about the context and who is providing the data with response size almost around 1500-10,000 tokens and behave like you are a stocks advisor. If the prompt is general talks like [e.g., "hi", "what can you do for me"...] then respond according to your role.
     """
     )
     document_chain = create_stuff_documents_chain(llm, edited_prompt)
