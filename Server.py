@@ -8,22 +8,28 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_groq import ChatGroq
 from langchain.chains import create_retrieval_chain
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from langchain_cohere import CohereEmbeddings
-import json,time
-from web_scrap import search_urls
-from concurrent.futures import ThreadPoolExecutor
+from time import time
+import json, time
+from regex import retrieve_symbol
+from web_scrap import search_urls, load_data_from_links, scrap_urls
+from fastapi.middleware.cors import CORSMiddleware
 
 groq_api_key = "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"
-llm = ChatGroq(groq_api_key=groq_api_key, model_name="llama3-70b-8192",temperature=0.3)
+llm = ChatGroq(groq_api_key=groq_api_key, model_name="llama3-70b-8192", temperature=0.3)
 embeddings_obj = CohereEmbeddings(
     model="embed-english-v3.0",
-    cohere_api_key="fb1d788zuAEdb83rWpe5MESR6Gx16sI7wu0rHQVP",
+    cohere_api_key="yPk6URXBI73JAvNZIEpw5tXmxchseO5mFZIhTxsN",
 )
-
 app = FastAPI()
-executor = ThreadPoolExecutor(max_workers=10)
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class Query(BaseModel):
     description: str | None = None
@@ -34,10 +40,7 @@ async def ping():
     return "hi"
 
 
-@app.post("/predict")
-async def predict(query: Query):
-    news_splitted = None
-    links = []
+def first_response(query):
     loader = WebBaseLoader(
         "https://raw.githubusercontent.com/Ansh-Chamriya/forinstall/main/NSE_EQ.json",
     )
@@ -48,7 +51,6 @@ async def predict(query: Query):
         "faiss_index", embeddings_obj, allow_dangerous_deserialization=True
     )
     db = loaded_db
-    docs = loaded_db.similarity_search("instrument key of RBI")
     json_prompt = ChatPromptTemplate.from_template(
         """
     Given today's date {date} (which is {day}), answer user questions accurately and set the start and end dates as per the question. If no period is specified, use 'day' from today to the past 30 days. Choose the time frame from [1minute, 30minute, day, week, month].
@@ -88,7 +90,7 @@ async def predict(query: Query):
     Generate URLs in JSON format for each company mentioned in the input. If no company is specified, return None.
 
     Example: 
-    If the prompt is "give the top 5 companies to invest in currently," return None.
+    If the prompt is "give the top 5 companies to invest in currently," return None in such type of all cases.
 
     Notice:
     Output JSON only any like [eg. Since the question is asking for the current stock price of Axis Bank, I will generate a URL for today's data. Here is the output:
@@ -101,79 +103,86 @@ async def predict(query: Query):
     retrieval_chain = create_retrieval_chain(retriever, document_chain)
     response = retrieval_chain.invoke(
         input={
-            "input": query.description,
+            "input": query,
             "context": json_splitted,
             "date": date.today(),
             "day": datetime.today().strftime("%A"),
         }
     )
+    return db, response
+
+
+def upstrox_data(data):
+    if isinstance(data, list):
+        print("Entered in region of list forms data block ..........")
+        # url_dict = {"urls": [d["url"] for d in data]}
+        links = data
+    else:
+        print("Entered in region of json forms data block ..........")
+        json_object = json.dumps(data, indent=None)
+        json_string = json.loads(json_object)
+        for key in json_string:
+            if key == "url":
+                links = data["url"]
+            elif key == "urls":
+                links = data["urls"]
+    return links
+
+
+@app.post("/company")
+async def company(query: Query):
+    data = []
+    loaded_db = FAISS.load_local(
+        "faiss_index", embeddings_obj, allow_dangerous_deserialization=True
+    )
+    company = loaded_db.similarity_search(query.description)
+    for comp in company:
+        data.append(comp.page_content)
+    data_string = str(data)
+    response = retrieve_symbol(data_string)
+    print(response)
+    return response
+
+
+@app.post("/predict")
+async def predict(query: Query):
+    news_splitted = None
+    links = []
+    db, response = first_response(query.description)
     try:
         data = response["answer"]
+        print(data)
         if isinstance(data, str):
             data = json.loads(response["answer"])
-        print(data)
-        print(type(data))
         try:
-            if isinstance(data, list):
-                print("Entered in region of list forms data block ..........")
-                url_dict = {"urls": [d["url"] for d in data]}
-                print(url_dict)
-                links = url_dict["urls"]
-            else:
-                print("Entered in region of json forms data block ..........")
-                json_object = json.dumps(data, indent=None)
-                json_string = json.loads(json_object)
-                for key in json_string:
-                    if key == "url":
-                        links = data["url"]
-                    elif key == "urls":
-                        links = data["urls"]
+            links = upstrox_data(data)
             print(links)
+            web_splitted = load_data_from_links(links)
         except Exception as e:
-            links = search_urls(query.description)
-
-        def load_data_from_links(links):
-            try:
-                loader = WebBaseLoader(links)
-                web_data = loader.load()
-                text_splitter = RecursiveCharacterTextSplitter(
-                    chunk_size=500, chunk_overlap=50
-                )
-                web_splitted = text_splitter.split_documents(web_data)
-                return web_splitted
-            except Exception as e:
-                return None
-
-        web_splitted_future = executor.submit(load_data_from_links, links)
+            print("##" * 50)
+            web_splitted = search_urls(query.description)
+            print("Web data is updated of google.")
 
         try:
             news_links = [
-                "https://newsapi.org/v2/everything?q=(NSE%20AND%20BSE)&from=2024-07-26&to=2024-07-26&sortBy=popularity&apiKey=d1858fd8650743deb697aea90617d602",
-                "https://newsapi.org/v2/everything?domains=moneycontrol.com,cnbc.com,bloomberg.com,thehindubusinessline.com/topic/nse,nseindia.com/resources/exchange-communication-media-center&apiKey=d1858fd8650743deb697aea90617d602",
+                f"https://newsapi.org/v2/everything?q=(NSE%20AND%20BSE)&from={date.today()}&to={date.today()}&sortBy=popularity&apiKey=d1858fd8650743deb697aea90617d602",
+                f"https://newsapi.org/v2/everything?&from={date.today()}&to={date.today()}domains=moneycontrol.com,cnbc.com,bloomberg.com,thehindubusinessline.com/topic/nse,nseindia.com/resources/exchange-communication-media-center&apiKey=d1858fd8650743deb697aea90617d602",
             ]
             loader = WebBaseLoader(news_links)
             news_web_data = loader.load()
             text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=500, chunk_overlap=50
+                chunk_size=1000, chunk_overlap=200
             )
             news_splitted = text_splitter.split_documents(news_web_data)
         except Exception as e:
             news_splitted = None
 
-        web_splitted = web_splitted_future.result()
+        st_time = time()
         db = FAISS.from_documents(web_splitted, embeddings_obj)
-        print(db.similarity_search(query.description))
+        print("Time taken for Generating the Embeddings : ", time() - st_time)
         print("--" * 60)
+
     except Exception as e:
-        check=ChatPromptTemplate.from_template(
-            'if the user prompts is "{user_ip}" general talks [eg. hi,hello how are you ?] then return null in response'
-        )
-        check_temp=check.format(user_ip=query.description)
-        time.sleep(2)
-        check_res=llm.invoke(check_temp)
-        print("**"*50)
-        print(check_res)
-        print("**"*50)
         web_splitted = None
 
     edited_prompt = ChatPromptTemplate.from_template(
@@ -195,7 +204,7 @@ async def predict(query: Query):
         {input}
 
         Give the answer without commenting anything about the context and who is providing the data with response size almost around 1500-10,000 tokens and behave like you are a stocks advisor. If the prompt is general talks like [e.g., "hi", "what can you do for me"...] then respond according to your role.
-    """
+        """
     )
     document_chain = create_stuff_documents_chain(llm, edited_prompt)
     retriever = db.as_retriever()
@@ -209,7 +218,8 @@ async def predict(query: Query):
             "day": datetime.today().strftime("%A"),
         }
     )
-    print(response["answer"])
+    print("**" * 50)
+    print(type(response["answer"]))
     return response["answer"]
 
 
